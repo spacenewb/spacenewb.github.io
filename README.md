@@ -43,3 +43,28 @@ This work is published under [MIT][mit] License.
 [use-template]: https://github.com/cotes2020/chirpy-starter/generate
 [CD]: https://en.wikipedia.org/wiki/Continuous_deployment
 [mit]: https://github.com/cotes2020/chirpy-starter/blob/master/LICENSE
+
+## Instructions for deploying
+
+Follow this procedure always:
+
+### Procedure:
+1. make changes
+2. host local server and verify 
+3. stop local server
+4. build site for deploying
+5. commit changes to github
+6. Check deployment in github actions
+7. Visit site and verify
+
+### Commands:
+Build site:
+* `jekyll build`
+
+
+Host local server: --> (http://127.0.0.1:4000/)
+* `bundle exec jekyll s`
+* `jekyll serve`
+* With drafts:
+    * `jekyll serve --drafts`
+    * `jekyll build --drafts`
