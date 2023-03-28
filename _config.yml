@@ -49,7 +49,6 @@ social:
 
 google_site_verification: # fill in to your verification string
 
-
 # ↑ --------------------------
 # The end of `jekyll-seo-tag` settings
 
@@ -81,7 +80,7 @@ theme_mode: # [light|dark]
 img_cdn:
 
 # the avatar on sidebar, support local or CORS resources
-avatar: "src/images/spacenewb_icon_alt.png"
+avatar: "assets/img/avatar/spacenewb_icon_alt.png"
 
 # boolean type, the global switch for TOC in posts.
 toc: true
