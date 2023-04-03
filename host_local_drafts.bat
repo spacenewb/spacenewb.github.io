@@ -28,12 +28,7 @@
     If /I "%Input%"=="y" goto yes3
     goto no3
     :yes3
-    ::jekyll build
-
-    git checkout main
-    git add .
-    git commit -am "auto build and push"
-    git push
-
+    jekyll build && git checkout main && git add . && git commit -am "auto build and push" && git push
+    
     :no3
     pause
