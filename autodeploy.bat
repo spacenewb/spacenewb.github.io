@@ -1,4 +1,3 @@
-
 :main
     @echo off
     echo              ---Local Hosting / Build Static Site---
