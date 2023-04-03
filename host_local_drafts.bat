@@ -9,33 +9,41 @@
     echo DO YOU WANT TO HOST LOCALLY? (y/n)
     set /p Input=Enter Yes or No:
     echo.
-    If /I "%Input%"=="y" goto yes1
-    goto no1
+    If /I "%Input%"=="y" goto localhosting
+    goto buildpushprompt
 
-    :yes1
-
+    :localhosting
     echo DO YOU WANT TO SERVE DRAFTS? (y/n)
     set /p Input=Enter Yes or No:
     echo.
-    If /I "%Input%"=="y" goto yes2
-    goto no2
-    :yes2
-    bundle exec jekyll serve --drafts
-    :no2
-    bundle exec jekyll serve
+    If /I "%Input%"=="y" goto withdrafts
+    goto withoutdrafts
 
-    :no1
+        :withdrafts
+        bundle exec jekyll serve --drafts
+        echo EXITING...
+        exit
+
+        :withoutdrafts
+        bundle exec jekyll serve
+        echo EXITING...
+        exit
+
+    :buildpushprompt
     echo DO YOU WANT TO BUILD AND PUSH? (y/n)
     set /p Input=Enter Yes or No:
     echo.
-    If /I "%Input%"=="y" goto yes3
-    goto no3
-    :yes3
-    jekyll build && git checkout main && git add . && git commit -am "auto build and push" && git push
+    If /I "%Input%"=="y" goto buildpush
+    goto nothing
     
-    :no3
-    echo.
-    echo NO ACTIONS CHOSEN
-    echo.
-    echo EXITING...
-    exit
+        :buildpush
+        jekyll build && git checkout main && git add . && git commit -am "auto build and push" && git push
+        echo EXITING...
+        exit
+
+        :nothing
+        echo.
+        echo NO ACTIONS CHOSEN
+        echo.
+        echo EXITING...
+        exit
