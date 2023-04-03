@@ -38,8 +38,8 @@
 
         :buildpush
         jekyll build && git checkout main && git add . && git commit -am "auto build and push" && git push^
-        echo EXITING...
-        exit
+         echo EXITING...
+         exit
 
         :nothing
         echo.
