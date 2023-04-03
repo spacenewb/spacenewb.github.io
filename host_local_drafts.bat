@@ -20,14 +20,10 @@
     goto withoutdrafts
 
         :withdrafts
-        bundle exec jekyll serve --drafts
-        echo EXITING...
-        exit
+        bundle exec jekyll serve --drafts && echo EXITING... && exit
 
         :withoutdrafts
-        bundle exec jekyll serve
-        echo EXITING...
-        exit
+        bundle exec jekyll serve && echo EXITING... && exit
 
     :buildpushprompt
     echo DO YOU WANT TO BUILD AND PUSH? (y/n)
