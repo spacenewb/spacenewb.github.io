@@ -37,7 +37,7 @@
     goto nothing
 
         :buildpush
-        jekyll build && git checkout main && git add . && git commit -am "auto build and push" && git push^
+        jekyll build && git checkout main && git add . && git commit -am "auto build and push" && git push ^
          echo EXITING...
          exit
 
