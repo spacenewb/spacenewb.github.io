@@ -1,6 +1,3 @@
-@ECHO OFF
-
-::bundle exec jekyll serve --drafts
 
 :main
     @echo off
