@@ -17,8 +17,7 @@ if [[ $localhosting == "y" ]]; then
         echo
         echo "EXITING..."
     fi
-  
-  
+
 elif [[ $localhosting == "n" ]]; then
 
     read -p "DO YOU WANT TO BUILD AND PUSH? (y/n)" buildpushprompt
