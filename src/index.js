@@ -359,104 +359,6 @@ function getLocalDateTime(milliseconds) {
   };
 }
 
-
-////////////////////////////////////////////////////////////////////////////////////////////
-const deg2rad = 2*Math.PI/180;
-const rad2deg = 180/2/Math.PI;
-const MUearth = 3.986004418e5;
-const Rearth = 6371.4;
-
-window.onresize = function(){ location.reload(); };
-
-document.addEventListener('DOMContentLoaded', async function () {
-  // Start displaying local time and update it
-  setInterval(updateLocalTime, 1000);
-
-  const geojson = await getMapJson();
-  make_map_plot([], [], [], [], true);
-  make_orbit_plot(0, 0, true);
-  make_sky_plot([], [], true);
-
-  // Monitor the search button and corresponding  onclick event
-  document.getElementById('get_sat_id').onclick = async function () {
-    setInnerHtmlbyId('found_sat', 'Searching...');
-    var textInput = document.getElementById('sat_id_input');
-    var TLE = await getGPDataCelestrack(textInput.value.trim(), 'TLE');
-    setInnerHtmlbyId('found_sat', TLE[0]);
-  };
-
-  // Monitor the apply button and corresponding  onclick event
-  document.getElementById('apply_sat').onclick = async function () {
-
-    var textInput = document.getElementById('sat_id_input');
-    var apply_btn = document.getElementById('apply_sat');  
-    var fund_btn  = document.getElementById('get_sat_id');
-
-    if (apply_btn.getAttribute('mode') === 'stop') {
-      location.reload();
-    };
-
-    var fadelayer = document.getElementById('fade-wrapper');
-    var spinner = document.getElementById('spinner');
-    fadelayer.style.display = 'block';
-    fadelayer.style.opacity = 1;
-    spinner.style.display = 'block';
-    spinner.style.opacity = 1;
-
-    const TLE = await getGPDataCelestrack(textInput.value.trim(), 'TLE');
-
-    // Initialize a satellite record
-    const satrec = satellite.twoline2satrec(TLE[1], TLE[2]);
-
-    // Get the user location from browser geolocation API
-    const observer_loc = await getUserLocation();
-    const my_loc = {
-      name: "",
-      location: {
-        latitude: observer_loc.latitude,
-        longitude: observer_loc.longitude
-      }
-    };
-    setInnerHtmlbyId('local_lat', observer_loc.latitude.toFixed(4) + '°');
-    setInnerHtmlbyId('local_lon', observer_loc.longitude.toFixed(4) + '°');
-    setInnerHtmlbyId('local_alt', observer_loc.elevation.toFixed(4) + ' km');
-
-    setInnerHtmlbyId('found_sat', TLE[0]);
-    setInnerHtmlbyId('tle0', TLE[0]);
-    setInnerHtmlbyId('tle1', TLE[1]);
-    setInnerHtmlbyId('tle2', TLE[2]);
-    setInnerHtmlbyId('tle_update', (new Date()).toLocaleString() + ', generated at: ' + (new Date((satrec.jdsatepoch - 2440587.5)*86400000)).toLocaleString());
-    setInnerHtmlbyId('apogee-text', 'Apogee: ' + ((1+satrec.ecco)*(Math.cbrt(MUearth/(satrec.no/60)**2)) - Rearth).toFixed(3) + ' km');
-    setInnerHtmlbyId('perigee-text', 'Perigee: ' + ((1-satrec.ecco)*(Math.cbrt(MUearth/(satrec.no/60)**2)) - Rearth).toFixed(3) + ' km');
-    setInnerHtmlbyId('inclination-text', 'Inclination: ' + ((satrec.inclo)*rad2deg).toFixed(4) + '°');
-  
-    const N_orbits = 1;
-    const predictionObj = predictNOrbits(satrec, N_orbits, observer_loc);
-
-    var refreshTimeData = 2000;
-    var refreshIntervalId1 = setInterval(updateInterpolatedPrediction, refreshTimeData, predictionObj);
-    var refreshTimePlots = 10000;
-    var refreshIntervalId2 = setInterval(updateInterpolatedPredictionPlots, refreshTimePlots, predictionObj, my_loc, geojson);
-    
-    if (predictionObj.time.at(-1) <= (new Date())) {
-      clearInterval(refreshIntervalId1);
-      clearInterval(refreshIntervalId2);
-    };
-
-    fadelayer.style.display = 'None';
-    fadelayer.style.opacity = 0;
-    spinner.style.display = 'None';
-    spinner.style.opacity = 0;
-
-    textInput.disabled = true;
-    fund_btn.disabled = true;
-    setInnerHtmlbyId('apply_sat', 'Stop');
-    apply_btn.setAttribute('mode', 'stop');
-  };
-});
-
-////////////////////////////////////////////////////////////////////////////////////////////
-
 function CSVToArray(strData, strDelimiter = ',') {
   // Create a regular expression to parse the CSV values.
   var objPattern = new RegExp(
@@ -537,3 +439,527 @@ function getMeanAnomalyAfter(
     MA_epoch_deg + Mean_motion_deg_min * Delta_T_after_epoch_mins;
   return MA_at_T_deg;
 }
+
+function true2eccentric(f, ecc) {
+    var sinE = Math.sqrt(1 - ecc**2) * Math.sin(f);
+    var cosE = ecc + Math.cos(f);
+    var E = Math.atan2(sinE, cosE);
+    return E;
+}
+
+function mean2eccentric(meanAnomaly, eccentricity, tolerance = 1e-6) {
+    let eccentricAnomaly = meanAnomaly; // Initial guess
+    
+    while (true) {
+      const deltaM = eccentricAnomaly - eccentricity * Math.sin(eccentricAnomaly) - meanAnomaly;
+      const deltaE = deltaM / (1 - eccentricity * Math.cos(eccentricAnomaly));
+      eccentricAnomaly -= deltaE;
+      
+      if (Math.abs(deltaE) < tolerance) {
+        break;
+      }
+    }
+    
+    return eccentricAnomaly;
+}
+
+function polar2cartesian(r, E) {
+    var x = r * Math.cos(E);
+    var y = r * Math.sin(E);
+    return {x, y}
+}
+
+function aef2r(a, ecc, E) {
+    var b = a * Math.sqrt(1 - ecc**2);
+    var num = a*b;
+    var denom1 = b**2 * Math.cos(E)**2;
+    var denom2 = a**2 * Math.sin(E)**2;
+    var denom = Math.sqrt(denom1 + denom2);
+    var r = num/denom;
+    return r;
+}
+
+function aeftor(a, ecc, f) {
+    var E = true2eccentric(f, ecc);
+    var r = aef2r(a, ecc, E);
+    return r;
+}
+
+function appendIfExist(element, appending) {
+    const appended = element.node()
+        ? element
+        : g.append(appending);
+}
+
+function make_orbit_plot(ecc, MA_now, only_base=false) {
+
+    var elem_id = 'orbit_plot_svg';
+    var canvas = d3.select("#" + elem_id);
+    canvas.selectAll("svg").remove();
+    var svg = canvas.append("svg");
+
+    var asked_ar = Number(canvas.attr("ar"));
+    var canvas_width = svg.node().getBoundingClientRect().width;
+    var canvas_height = canvas_width*asked_ar;
+    svg.attr("height", canvas_width*asked_ar);
+
+    var margin = 7;
+    var cX = canvas_width/2;
+    var cY = canvas_height/2;
+    var radius = Math.min(cX-margin, cY-margin);
+
+    var SMA = radius;
+    var SmA = SMA*Math.sqrt(1 - ecc**2);
+    var C = SMA*ecc;
+
+    var E_now = mean2eccentric(MA_now, ecc);
+
+    var R = aef2r(SMA, ecc, E_now);
+    var satpos = polar2cartesian(R, E_now);
+
+    var xScale = d3.scaleLinear(
+        [-radius, radius], 
+        [-radius+cX, radius+cX]
+    );
+    var yScale = d3.scaleLinear(
+        [-radius, radius], 
+        [-radius+cY, radius+cY]
+    );
+
+    var tooltip = svg
+        .append("div")
+        .style("position", "absolute")
+        .style("z-index", "10")
+        .style("visibility", "hidden")
+        .style("background", "#000")
+        .text("a simple tooltip");
+
+    var circle = svg.append("ellipse")
+        .attr("cx", xScale(0))
+        .attr("cy", yScale(0))
+        .attr("rx", SMA)
+        .attr("ry", SmA)
+        .attr("class", "line3");
+
+    var focus = svg.append("circle")
+        .attr("cx", xScale(C))
+        .attr("cy", yScale(0))
+        .attr("r", 7)
+        .attr("class", "scatter4");
+        
+    var earth_text = svg.append("text")
+        .text("Earth")
+        .attr("x", xScale(C))
+        .attr("y", yScale(0))
+        .attr("dx", -10)
+        .attr("dy", 5)
+        .attr("text-anchor", "end")
+        .attr("class", "graphtext");
+
+    if (only_base!=true) {
+        var sat = svg.append("circle")
+            .attr("cx", xScale(satpos.x))
+            .attr("cy", yScale(-satpos.y))
+            .attr("r", 5)
+            .attr("class", "satpin blink");
+    };
+
+};
+
+/////////////////////////////////////////////////////////////////////
+
+
+
+function getSubtendedHalfAngle(SatCurrLoc) {
+  var EarthR = 6371.4; //km
+  var subtendHalfAngle = Math.acos(EarthR/(EarthR+SatCurrLoc.altitude));
+  return subtendHalfAngle;
+}
+
+function projectOnMap(projection, coord) {
+  var projected = projection([
+    coord.longitude,
+    coord.latitude
+  ]);
+  return projected;
+}
+
+async function getMapJson() {
+  var MapJsonUrl = 'https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson';
+
+  let obj;
+  obj = await d3.json(MapJsonUrl);
+  return obj;
+}
+    
+
+async function make_map_plot(SunPos, SatCurrLoc, SatTrackPath, place, only_base=false) {
+
+  const geojson = await getMapJson();
+
+  //////////////////////////////////////////////////
+
+  var elem_id = 'map_plot_svg';
+  var canvas = d3.select("#" + elem_id);
+  canvas.selectAll("svg").remove();
+
+  var asked_ar = Number(canvas.attr("ar"));
+
+  var svg = canvas.append("svg");
+  var canvas_width = svg.node().getBoundingClientRect().width;
+  var canvas_height = canvas_width*asked_ar;
+  svg.attr("height", canvas_width*asked_ar);
+
+  let projection = d3.geoEquirectangular()
+      .precision(1);
+
+  let geoGenerator = d3.geoPath()
+      .pointRadius(5)
+    .projection(projection);
+
+  //////////////////////////////////////////////////
+
+  let u = svg.selectAll('path')
+        .data(geojson.features);
+    
+  projection.fitExtent([ [0, 0], [canvas_width, canvas_height] ], geojson);
+
+  // Make Land Map
+  // Draw a rectangle as a background
+  var water = svg.append("rect")
+    .attr("x", 0)
+    .attr("y", 0)
+    .attr("width", canvas_width)
+    .attr("height", canvas_height)
+    .attr("class", "mapwater");
+    
+  var map = u.enter()
+    .append('path')
+    .attr('d', geoGenerator)
+    .attr("class", "mapland");
+  
+  //  Make Graticules
+  let graticuleGenerator = d3.geoGraticule();
+
+  let graticules = graticuleGenerator();
+
+  var grid = u.enter()
+  .append('path')
+  .attr('d', geoGenerator(graticules))
+  .attr("class", "mapgraticule");
+
+  if (only_base!=true) {
+    // Make Satellite Current Pos and View Circle
+    var sat_point = u.enter().append("circle")
+        .attr("r", 4)
+        .attr("transform", "translate(" + projectOnMap(projection, SatCurrLoc) + ")")
+        .attr('class', 'satpin blink');
+
+    let circleGenerator1 = d3.geoCircle()
+        .center([SatCurrLoc.longitude, SatCurrLoc.latitude])
+        .radius(getSubtendedHalfAngle(SatCurrLoc)*180/Math.PI);
+
+    let circle1 = circleGenerator1();
+
+    var sat_view = u.enter()
+    .append('path')
+    .attr('d', geoGenerator(circle1))
+    .attr("class", "satviewarea");
+      
+    // Make Circle Sun Pos
+    var sun_point = u.enter().append("circle")
+        .attr("r", 4)
+        .attr("transform", "translate(" + projectOnMap(projection, SunPos) + ")")
+        .attr('class', 'sunpin');
+
+    let circleGenerator2 = d3.geoCircle()
+        .center([SunPos.longitude, SunPos.latitude])
+        .radius(90);
+
+    let circle2 = circleGenerator2();
+
+    var sun_circle = u.enter()
+      .append('path')
+      .attr('d', geoGenerator(circle2))
+      .attr('class', 'sunlitarea')
+      .attr('fill-opacity', 0.2);
+
+    //  Make Sat Track Lines
+    let line = {
+        type: 'Feature',
+        geometry: {
+            type: 'LineString',
+            coordinates: SatTrackPath
+        }
+    };
+    var sat_tracks = u.enter()
+    .append('path')
+    .attr('d', geoGenerator(line))
+    .attr('class', 'sattrack');
+        
+    //  Make Ground Location Points
+    var gnd_points = u.enter().append("circle")
+        .attr("r", 4)
+        .attr("class", "pin")
+        .attr("transform", "translate(" + projectOnMap(projection, place.location) + ")")
+        .attr('class', 'citypin');
+  };
+
+};
+
+/////////////////////////////////////////////////////////////////////
+
+function sky2cartpolar(SkyCoords, xScale, yScale, rScale) {
+    if (typeof SkyCoords !== 'undefined' && SkyCoords.length > 0) {
+        // the array is defined and has at least one element
+        const coords = [];
+        let i = 0;
+        while (i<SkyCoords.length) {
+            var satR = 1 - Math.abs(SkyCoords[i].el)/90.0;
+            var satX = xScale(0) + rScale(satR*Math.cos((SkyCoords[i].az-90)*Math.PI/180));
+            var satY = yScale(0) + rScale(satR*Math.sin((SkyCoords[i].az-90)*Math.PI/180));
+            var coord = {x: satX, y: satY};
+            coords.push(coord);
+            i++
+        };
+        return coords;
+    } else {
+        var satR = 1 - Math.abs(SkyCoords.el)/90.0;
+        var satX = xScale(0) + rScale(satR*Math.cos((SkyCoords.az-90)*Math.PI/180));
+        var satY = yScale(0) + rScale(satR*Math.sin((SkyCoords.az-90)*Math.PI/180));
+        var coord = {x: satX, y: satY};
+        return coord;
+    };
+};
+
+
+function make_sky_plot(SkyCoords, SkyCoords_now, only_base=false) {
+    //Make an SVG Container
+    var margin = 5;
+    var axis_factor = 1.2;
+    var canvas = d3.select("#sky_plot_svg");
+    canvas.selectAll("svg").remove();
+
+    var asked_ar = Number(canvas.attr("ar"));
+
+    var svg = canvas.append("svg");
+    var canvas_width = svg.node().getBoundingClientRect().width;
+    var canvas_height = canvas_width*asked_ar;
+    svg.attr("height", canvas_width*asked_ar);
+
+    var cX = canvas_width/2;
+    var cY = canvas_height/2;
+    var radius = Math.min(cX-margin, cY-margin)/axis_factor;
+
+    var xScale = d3.scaleLinear(
+        [-radius, radius], 
+        [-radius+cX, radius+cX]
+    );
+    var yScale = d3.scaleLinear(
+        [-radius, radius], 
+        [-radius+cY, radius+cY]
+    );
+    var rScale = d3.scaleLinear(
+        [-1, 1], 
+        [-radius, radius]
+    );
+
+    var N_circles = 3;
+    for (let i = 1; i <= N_circles; i++) {
+        var r_step = 1/N_circles;
+        var eff_r = i*r_step;
+        svg.append("circle")
+            .attr("cx", xScale(0))
+            .attr("cy", yScale(0))
+            .attr("r", rScale(eff_r))
+            .attr("class", "axis");
+    };
+
+    var dir_labels = ['N', 'E', 'S', 'W'];
+    var dir_angles = [0, 90, 180, 270];
+    const len_dir = dir_angles.length;
+
+    for (let i = 0; i < len_dir; i++) {
+        var eff_ang = (dir_angles[i] - 90)*Math.PI/180;
+        var x = Math.cos(eff_ang);
+        var y = Math.sin(eff_ang);
+        svg.append("line")
+            .attr("x1", xScale(0))
+            .attr("y1", yScale(0))
+            .attr("x2", xScale(0) + rScale(x*(axis_factor-0.1)))
+            .attr("y2", yScale(0) + rScale(y*(axis_factor-0.1)))
+            .attr("class", "axis");
+        svg.append("text")
+            .text(dir_labels[i])
+            .attr("x", xScale(0) + rScale(x*(axis_factor-0.025)))
+            .attr("y", yScale(0) + rScale(y*(axis_factor-0.025)))
+            .attr("dx", 0)
+            .attr("dy", 5)
+            .attr("text-anchor", "middle")
+            .attr("class", "graphlabels");
+    };
+
+    var SatCoords_now = sky2cartpolar(SkyCoords_now, xScale, yScale, rScale);
+
+    if (only_base!=true) {
+        if (typeof SkyCoords !== 'undefined' && SkyCoords.length > 0) {
+            // the array is defined and has at least one element
+            var SatCoords = sky2cartpolar(SkyCoords, xScale, yScale, rScale);
+
+            var rise_time = getLocalDateTime(SkyCoords[0].t);
+            var set_time = getLocalDateTime(SkyCoords[SkyCoords.length - 1].t);
+
+            var pathLine = d3.line()
+                .x(d => d.x)
+                .y(d => d.y)
+                .curve(d3.curveCatmullRom.alpha(.5));
+
+            svg.append("path")
+                .attr("d", pathLine(SatCoords))
+                .attr("class", "line4");
+
+            svg.append("circle")
+                .attr("cx", SatCoords[0].x )
+                .attr("cy", SatCoords[0].y )
+                .attr("r", 4)
+                .attr("class", "scatter3");
+            if (SatCoords_now.el < 0) {
+                svg.append("text")
+                    .text("Rise: " + rise_time.date + ' ' + rise_time.time)
+                    .attr("x", 0)
+                    .attr("y", 0)
+                    .attr("dx", 5)
+                    .attr("dy", 10)
+                    .attr("text-anchor", "start")
+                    .attr("class", "graphtext");
+            };
+            
+            svg.append("circle")
+                .attr("cx", SatCoords[SatCoords.length - 1].x )
+                .attr("cy", SatCoords[SatCoords.length - 1].y )
+                .attr("r", 4)
+                .attr("class", "scatter2");
+            if (SatCoords_now.el < 0) {
+                svg.append("text")
+                    .text("Set: " + set_time.date + ' ' + set_time.time)
+                    .attr("x", canvas_width)
+                    .attr("y", 0)
+                    .attr("dx", -5)
+                    .attr("dy", 10)
+                    .attr("text-anchor", "end")
+                    .attr("class", "graphtext");
+            };
+
+        };
+
+        var sat = svg.append("circle")
+                .attr("cx", SatCoords_now.x )
+                .attr("cy", SatCoords_now.y )
+                .attr("r", 5)
+                .attr("class", "satpin blink");
+    };
+            
+
+
+};
+
+/////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////
+const deg2rad = 2*Math.PI/180;
+const rad2deg = 180/2/Math.PI;
+const MUearth = 3.986004418e5;
+const Rearth = 6371.4;
+
+window.onresize = function(){ location.reload(); };
+
+document.addEventListener('DOMContentLoaded', async function () {
+  // Start displaying local time and update it
+  setInterval(updateLocalTime, 1000);
+
+  const geojson = await getMapJson();
+  make_orbit_plot(0, 0, true);
+  make_map_plot([], [], [], [], true);
+  make_sky_plot([],[],true);
+
+  // Monitor the search button and corresponding  onclick event
+  document.getElementById('get_sat_id').onclick = async function () {
+    setInnerHtmlbyId('found_sat', 'Searching...');
+    var textInput = document.getElementById('sat_id_input');
+    var TLE = await getGPDataCelestrack(textInput.value.trim(), 'TLE');
+    setInnerHtmlbyId('found_sat', TLE[0]);
+  };
+
+  // Monitor the apply button and corresponding  onclick event
+  document.getElementById('apply_sat').onclick = async function () {
+
+    var textInput = document.getElementById('sat_id_input');
+    var apply_btn = document.getElementById('apply_sat');  
+    var fund_btn  = document.getElementById('get_sat_id');
+
+    if (apply_btn.getAttribute('mode') === 'stop') {
+      location.reload();
+    };
+
+    var fadelayer = document.getElementById('fade-wrapper');
+    var spinner = document.getElementById('spinner');
+    fadelayer.style.display = 'block';
+    fadelayer.style.opacity = 1;
+    spinner.style.display = 'block';
+    spinner.style.opacity = 1;
+
+    const TLE = await getGPDataCelestrack(textInput.value.trim(), 'TLE');
+
+    // Initialize a satellite record
+    const satrec = satellite.twoline2satrec(TLE[1], TLE[2]);
+
+    // Get the user location from browser geolocation API
+    const observer_loc = await getUserLocation();
+    const my_loc = {
+      name: "",
+      location: {
+        latitude: observer_loc.latitude,
+        longitude: observer_loc.longitude
+      }
+    };
+    setInnerHtmlbyId('local_lat', observer_loc.latitude.toFixed(4) + '°');
+    setInnerHtmlbyId('local_lon', observer_loc.longitude.toFixed(4) + '°');
+    setInnerHtmlbyId('local_alt', observer_loc.elevation.toFixed(4) + ' km');
+
+    setInnerHtmlbyId('found_sat', TLE[0]);
+    setInnerHtmlbyId('tle0', TLE[0]);
+    setInnerHtmlbyId('tle1', TLE[1]);
+    setInnerHtmlbyId('tle2', TLE[2]);
+    setInnerHtmlbyId('tle_update', (new Date()).toLocaleString() + ', generated at: ' + (new Date((satrec.jdsatepoch - 2440587.5)*86400000)).toLocaleString());
+    setInnerHtmlbyId('apogee-text', 'Apogee: ' + ((1+satrec.ecco)*(Math.cbrt(MUearth/(satrec.no/60)**2)) - Rearth).toFixed(3) + ' km');
+    setInnerHtmlbyId('perigee-text', 'Perigee: ' + ((1-satrec.ecco)*(Math.cbrt(MUearth/(satrec.no/60)**2)) - Rearth).toFixed(3) + ' km');
+    setInnerHtmlbyId('inclination-text', 'Inclination: ' + ((satrec.inclo)*rad2deg).toFixed(4) + '°');
+  
+    const N_orbits = 1;
+    const predictionObj = predictNOrbits(satrec, N_orbits, observer_loc);
+
+    var refreshTimeData = 2000;
+    var refreshIntervalId1 = setInterval(updateInterpolatedPrediction, refreshTimeData, predictionObj);
+    var refreshTimePlots = 10000;
+    var refreshIntervalId2 = setInterval(updateInterpolatedPredictionPlots, refreshTimePlots, predictionObj, my_loc, geojson);
+    
+    if (predictionObj.time.at(-1) <= (new Date())) {
+      clearInterval(refreshIntervalId1);
+      clearInterval(refreshIntervalId2);
+    };
+
+    fadelayer.style.display = 'None';
+    fadelayer.style.opacity = 0;
+    spinner.style.display = 'None';
+    spinner.style.opacity = 0;
+
+    textInput.disabled = true;
+    fund_btn.disabled = true;
+    setInnerHtmlbyId('apply_sat', 'Stop');
+    apply_btn.setAttribute('mode', 'stop');
+  };
+});
+
+////////////////////////////////////////////////////////////////////////////////////////////
