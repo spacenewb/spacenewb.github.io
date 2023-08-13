@@ -1,1 +1,539 @@
-function setInnerHtmlbyId(t,e){document.getElementById(t).innerHTML=e}function dummtTLE(){return["ISS (ZARYA)","1 25544U 98067A   23225.51503384  .00016273  00000-0  29947-3 0  9996","2 25544  51.6403  44.4989 0003352 304.3394 146.6746 15.49326028410681"]}function getDayOfYear(t){var e=t.getFullYear(),a=t.getMonth()+1,r=t.getDate();let n=[31,28,31,30,31,30,31,31,30,31,30,31];(e%4==0&&e%100!=0||e%400==0)&&(n[1]=29);let i=r;for(let l=0;l<a-1;l++)i+=n[l];return i}function getSunLatitude(t){var e=getDayOfYear(t),a=46.8/365.25;return 46.8-(e*a-79*a)}function getSunLongitude(t){var e,a=t.getUTCHours(),r=t.getUTCMinutes();return(12-(a+r/60+t.getUTCSeconds()/3600))*15}function getSunLatLon(t){var e=getSunLatitude(t);return{longitude:getSunLongitude(t),latitude:e}}function millisecondsToJulianDate(t){let e=Date.parse("1970-01-01T00:00:00Z");return(t-e)/864e5+2440587.5}function predictNOrbits(t,e,a){var r,n=180*e,i=2*Math.PI/t.no*e/n,l={value:[],time:[]},o=new Date;for(let s=1;s<=n;s++){var c=propagateTLE(t,o,i*(s-1),a);l.value.push(c.vals),l.time.push(c.time)}return l.satrec=t,l}function propagateTLE(t,e,a,r){var n=new Date(e.getTime()+6e4*a),i=(millisecondsToJulianDate(n)-t.jdsatepoch)*1440,l=satellite.propagate(t,n),o=l.position,s=l.velocity,c={longitude:satellite.degreesToRadians(r.longitude),latitude:satellite.degreesToRadians(r.latitude),height:r.elevation},d=satellite.gstime(new Date),$=satellite.eciToEcf(o,d),p=satellite.eciToGeodetic(o,d),u=satellite.ecfToLookAngles(c,$),_=u.azimuth,y=u.elevation,m=u.rangeSat,v=p.longitude,f=p.latitude,h=p.height,x=satellite.degreesLong(v),w=satellite.degreesLat(f),L=Math.sqrt(s.x**2+s.y**2+s.z**2),I=t.mo+t.no*a;return{time:n.getTime(),vals:{latitudeDeg:w,longitudeDeg:x,height:h,azimuthdeg:180*_/Math.PI,elevationdeg:180*y/Math.PI,rangeSat:m,velocityEciMag:L,ma:I,stale_min:i}}}function parseTLE(t,e){if("TLE"===e){var a=t.split("\r\n").slice(0,3).map(t=>t.trim());return a}if("2LE"===e){var a=t.split("\r\n").slice(0,2).map(t=>t.trim());return a}}async function getGPDataCelestrack(t,e){let a,r=await fetch("https://celestrak.org/NORAD/elements/gp.php?CATNR="+t+"&FORMAT="+e);if(!r.ok)return dummtTLE();if("TLE"===e||"2LE"===e){let n=await r.text();return parseTLE(n,e)}if("CSV"===e){let i=await r.text();return CSVToArray(i,",").splice(0,2)}if("JSON"===e){let l=await r.json();return JSON.parse(JSON.stringify(l[0],"",2))}}function interp1(t,e,a){let r=t.length,n=0,i=r-1;for(let l=0;l<r-1;l++)if(a>=t[l]&&a<=t[l+1]){n=l,i=l+1;break}let o=e[n]+(e[i]-e[n])*(a-t[n])/(t[i]-t[n]);return o}function getKey(t,e){return t.map(t=>t[e])}function prediction2sattrack(t){var e=[],a=getKey(t.value,"latitudeDeg"),r=getKey(t.value,"longitudeDeg");let n=0;for(;n<a.length;)e.push([r[n],a[n]]),n++;return e}function prediction2skymap(t){var e=[],a=getKey(t.value,"azimuthdeg"),r=getKey(t.value,"elevationdeg"),n=t.time;let i=0;for(;i<a.length;){if(r[i]>=0){var l=a[i],o=r[i],s=n[i];e.push({az:l,el:o,t:s})}i++}return e}function getPredictedValsAt(t,e){var a=Object.keys(e.value[0]);let r=0;for(var n={};r<a.length;){let i=e.time,l=getKey(e.value,a[r]);if(Array.isArray(t)){let o=t.map(t=>interp1(i,l,t));n[a[r]]=o}else{let s=[t].map(t=>interp1(i,l,t));n[a[r]]=Number(s)}r++}return n}function updateInterpolatedPrediction(t){let e=new Date,a=getPredictedValsAt(e,t);var r={az:a.azimuthdeg,el:a.elevationdeg};setInnerHtmlbyId("speed-card",a.velocityEciMag.toFixed(4)),setInnerHtmlbyId("alt-card",a.height.toFixed(2)),setInnerHtmlbyId("stale-card",a.stale_min.toFixed(2)),setInnerHtmlbyId("dist-card",a.rangeSat.toFixed(2)),setInnerHtmlbyId("az-text","Azimuth: "+r.az.toFixed(4)+"\xb0"),setInnerHtmlbyId("el-text","Elevation: "+r.el.toFixed(4)+"\xb0")}function updateInterpolatedPredictionPlots(t,e,a){let r=new Date,n=getPredictedValsAt(r,t);var i={az:n.azimuthdeg,el:n.elevationdeg},l=prediction2skymap(t),o=getSunLatLon(r),s=prediction2sattrack(t),c={longitude:n.longitudeDeg,latitude:n.latitudeDeg,altitude:n.height};make_orbit_plot(t.satrec.ecco,n.ma),make_map_plot(o,c,s,e),make_sky_plot(l,i)}function updateLocalTime(){setInnerHtmlbyId("local_time",new Date().toLocaleString())}function getLocalDateTime(t){let e=new Date(t),a=e.toLocaleDateString(),r=e.toLocaleTimeString();return{date:a,time:r}}function CSVToArray(t,e=","){for(var a=RegExp("(\\"+e+'|\\r?\\n|\\r|^)(?:"([^"]*(?:""[^"]*)*)"|([^"\\'+e+"\\r\\n]*))","gi"),r=[[]],n=null;n=a.exec(t);){var i,l=n[1];l.length&&l!==e&&r.push([]),i=n[2]?n[2].replace(RegExp('""',"g"),'"'):n[3],r[r.length-1].push(i)}return r}async function getUserLocation(){return new Promise((t,e)=>{"geolocation"in navigator?navigator.geolocation.getCurrentPosition(async e=>{let{latitude:a,longitude:r}=e.coords,n=await getUserAlt(a,r);t({latitude:a,longitude:r,elevation:n})},t=>{e(t)}):e(Error("Geolocation is not available in this browser."))})}async function getUserAlt(t,e){let a=await fetch("https://api.open-elevation.com/api/v1/lookup?locations="+t+","+e),r=await a.json(),n=r.results[0].elevation/1e3;return n}function getMeanAnomalyAfter(t,e,a){return t+360*e/1440*a}function true2eccentric(t,e){return Math.atan2(Math.sqrt(1-e**2)*Math.sin(t),e+Math.cos(t))}function mean2eccentric(t,e,a=1e-6){let r=t;for(;;){let n=r-e*Math.sin(r)-t,i=n/(1-e*Math.cos(r));if(r-=i,Math.abs(i)<a)break}return r}function polar2cartesian(t,e){return{x:t*Math.cos(e),y:t*Math.sin(e)}}function aef2r(t,e,a){var r=t*Math.sqrt(1-e**2);return t*r/Math.sqrt(r**2*Math.cos(a)**2+t**2*Math.sin(a)**2)}function aeftor(t,e,a){var r=true2eccentric(a,e);return aef2r(t,e,r)}function appendIfExist(t,e){t.node()||g.append(e)}function make_orbit_plot(t,e,a=!1){var r=d3.select("#orbit_plot_svg");r.selectAll("svg").remove();var n=r.append("svg"),i=Number(r.attr("ar")),l=n.node().getBoundingClientRect().width;n.attr("height",l*i);var o=l/2,s=l*i/2,c=Math.min(o-7,s-7),d=c,$=d*t,p=mean2eccentric(e,t),u=aef2r(d,t,p),_=polar2cartesian(u,p),y=d3.scaleLinear([-c,c],[-c+o,c+o]),m=d3.scaleLinear([-c,c],[-c+s,c+s]);n.append("div").style("position","absolute").style("z-index","10").style("visibility","hidden").style("background","#000").text("a simple tooltip"),n.append("ellipse").attr("cx",y(0)).attr("cy",m(0)).attr("rx",d).attr("ry",d*Math.sqrt(1-t**2)).attr("class","line3"),n.append("circle").attr("cx",y($)).attr("cy",m(0)).attr("r",7).attr("class","scatter4"),n.append("text").text("Earth").attr("x",y($)).attr("y",m(0)).attr("dx",-10).attr("dy",5).attr("text-anchor","end").attr("class","graphtext"),!0!=a&&n.append("circle").attr("cx",y(_.x)).attr("cy",m(-_.y)).attr("r",5).attr("class","satpin blink")}function getSubtendedHalfAngle(t){return Math.acos(6371.4/(6371.4+t.altitude))}function projectOnMap(t,e){return t([e.longitude,e.latitude])}async function getMapJson(){let t;return await d3.json("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson")}async function make_map_plot(t,e,a,r,n=!1){let i=await getMapJson();var l=d3.select("#map_plot_svg");l.selectAll("svg").remove();var o=Number(l.attr("ar")),s=l.append("svg"),c=s.node().getBoundingClientRect().width,d=c*o;s.attr("height",c*o);let $=d3.geoEquirectangular().precision(1),p=d3.geoPath().pointRadius(5).projection($),u=s.selectAll("path").data(i.features);$.fitExtent([[0,0],[c,d]],i),s.append("rect").attr("x",0).attr("y",0).attr("width",c).attr("height",d).attr("class","mapwater"),u.enter().append("path").attr("d",p).attr("class","mapland");let _=d3.geoGraticule()();if(u.enter().append("path").attr("d",p(_)).attr("class","mapgraticule"),!0!=n){u.enter().append("circle").attr("r",4).attr("transform","translate("+projectOnMap($,e)+")").attr("class","satpin blink");let y=d3.geoCircle().center([e.longitude,e.latitude]).radius(180*getSubtendedHalfAngle(e)/Math.PI)();u.enter().append("path").attr("d",p(y)).attr("class","satviewarea"),u.enter().append("circle").attr("r",4).attr("transform","translate("+projectOnMap($,t)+")").attr("class","sunpin");let m=d3.geoCircle().center([t.longitude,t.latitude]).radius(90)();u.enter().append("path").attr("d",p(m)).attr("class","sunlitarea").attr("fill-opacity",.2),u.enter().append("path").attr("d",p({type:"Feature",geometry:{type:"LineString",coordinates:a}})).attr("class","sattrack"),u.enter().append("circle").attr("r",4).attr("class","pin").attr("transform","translate("+projectOnMap($,r.location)+")").attr("class","citypin")}}function sky2cartpolar(t,e,a,r){if(void 0!==t&&t.length>0){let n=[],i=0;for(;i<t.length;){var l=1-Math.abs(t[i].el)/90,o=e(0)+r(l*Math.cos((t[i].az-90)*Math.PI/180)),s=a(0)+r(l*Math.sin((t[i].az-90)*Math.PI/180)),c={x:o,y:s};n.push(c),i++}return n}var l=1-Math.abs(t.el)/90,o=e(0)+r(l*Math.cos((t.az-90)*Math.PI/180)),s=a(0)+r(l*Math.sin((t.az-90)*Math.PI/180)),c={x:o,y:s};return c}function make_sky_plot(t,e,a=!1){var r=d3.select("#sky_plot_svg");r.selectAll("svg").remove();var n=Number(r.attr("ar")),i=r.append("svg"),l=i.node().getBoundingClientRect().width;i.attr("height",l*n);var o=l/2,s=l*n/2,c=Math.min(o-5,s-5)/1.2,d=d3.scaleLinear([-c,c],[-c+o,c+o]),$=d3.scaleLinear([-c,c],[-c+s,c+s]),p=d3.scaleLinear([-1,1],[-c,c]);for(let u=1;u<=3;u++){var _=.3333333333333333*u;i.append("circle").attr("cx",d(0)).attr("cy",$(0)).attr("r",p(_)).attr("class","axis")}var y=["N","E","S","W"],m=[0,90,180,270];let v=m.length;for(let f=0;f<v;f++){var h=(m[f]-90)*Math.PI/180,x=Math.cos(h),w=Math.sin(h);i.append("line").attr("x1",d(0)).attr("y1",$(0)).attr("x2",d(0)+p(x*(1.2-.1))).attr("y2",$(0)+p(w*(1.2-.1))).attr("class","axis"),i.append("text").text(y[f]).attr("x",d(0)+p(1.175*x)).attr("y",$(0)+p(1.175*w)).attr("dx",0).attr("dy",5).attr("text-anchor","middle").attr("class","graphlabels")}var L=sky2cartpolar(e,d,$,p);if(!0!=a){if(void 0!==t&&t.length>0){var I=sky2cartpolar(t,d,$,p),b=getLocalDateTime(t[0].t),k=getLocalDateTime(t[t.length-1].t),T=d3.line().x(t=>t.x).y(t=>t.y).curve(d3.curveCatmullRom.alpha(.5));i.append("path").attr("d",T(I)).attr("class","line4"),i.append("circle").attr("cx",I[0].x).attr("cy",I[0].y).attr("r",4).attr("class","scatter3"),L.el<0&&i.append("text").text("Rise: "+b.date+" "+b.time).attr("x",0).attr("y",0).attr("dx",5).attr("dy",10).attr("text-anchor","start").attr("class","graphtext"),i.append("circle").attr("cx",I[I.length-1].x).attr("cy",I[I.length-1].y).attr("r",4).attr("class","scatter2"),L.el<0&&i.append("text").text("Set: "+k.date+" "+k.time).attr("x",l).attr("y",0).attr("dx",-5).attr("dy",10).attr("text-anchor","end").attr("class","graphtext")}i.append("circle").attr("cx",L.x).attr("cy",L.y).attr("r",5).attr("class","satpin blink")}}const deg2rad=2*Math.PI/180,rad2deg=90/Math.PI,MUearth=398600.4418,Rearth=6371.4;window.onresize=function(){location.reload()},document.addEventListener("DOMContentLoaded",async function(){setInterval(d,1e3);let t=await x();function e(t,e){document.getElementById(t).innerHTML=e}function a(t,e,a){var n,i=180*e,l=2*Math.PI/t.no*e/i,o={value:[],time:[]},s=new Date;for(let c=1;c<=i;c++){var d=r(t,s,l*(c-1),a);o.value.push(d.vals),o.time.push(d.time)}return o.satrec=t,o}function r(t,e,a,r){var n=new Date(e.getTime()+6e4*a),i=(function t(e){let a=Date.parse("1970-01-01T00:00:00Z");return(e-a)/864e5+2440587.5}(n)-t.jdsatepoch)*1440,l=satellite.propagate(t,n),o=l.position,s=l.velocity,c={longitude:satellite.degreesToRadians(r.longitude),latitude:satellite.degreesToRadians(r.latitude),height:r.elevation},d=satellite.gstime(new Date),$=satellite.eciToEcf(o,d),p=satellite.eciToGeodetic(o,d),u=satellite.ecfToLookAngles(c,$),_=u.azimuth,y=u.elevation,m=u.rangeSat,v=p.longitude,f=p.latitude,h=p.height,x=satellite.degreesLong(v),w=satellite.degreesLat(f),L=Math.sqrt(s.x**2+s.y**2+s.z**2),I=t.mo+t.no*a;return{time:n.getTime(),vals:{latitudeDeg:w,longitudeDeg:x,height:h,azimuthdeg:180*_/Math.PI,elevationdeg:180*y/Math.PI,rangeSat:m,velocityEciMag:L,ma:I,stale_min:i}}}async function n(t,e){let a,r=await fetch("https://celestrak.org/NORAD/elements/gp.php?CATNR="+t+"&FORMAT="+e);if(!r.ok)return["ISS (ZARYA)","1 25544U 98067A   23225.51503384  .00016273  00000-0  29947-3 0  9996","2 25544  51.6403  44.4989 0003352 304.3394 146.6746 15.49326028410681"];if("TLE"===e||"2LE"===e){let n=await r.text();return function t(e,a){if("TLE"===a){var r=e.split("\r\n").slice(0,3).map(t=>t.trim());return r}if("2LE"===a){var r=e.split("\r\n").slice(0,2).map(t=>t.trim());return r}}(n,e)}if("CSV"===e){let i=await r.text();return(function t(e,a=","){for(var r=RegExp("(\\"+a+'|\\r?\\n|\\r|^)(?:"([^"]*(?:""[^"]*)*)"|([^"\\'+a+"\\r\\n]*))","gi"),n=[[]],i=null;i=r.exec(e);){var l,o=i[1];o.length&&o!==a&&n.push([]),l=i[2]?i[2].replace(RegExp('""',"g"),'"'):i[3],n[n.length-1].push(l)}return n})(i,",").splice(0,2)}if("JSON"===e){let l=await r.json();return JSON.parse(JSON.stringify(l[0],"",2))}}function i(t,e,a){let r=t.length,n=0,i=r-1;for(let l=0;l<r-1;l++)if(a>=t[l]&&a<=t[l+1]){n=l,i=l+1;break}let o=e[n]+(e[i]-e[n])*(a-t[n])/(t[i]-t[n]);return o}function l(t,e){return t.map(t=>t[e])}function o(t,e){var a=Object.keys(e.value[0]);let r=0;for(var n={};r<a.length;){let o=e.time,s=l(e.value,a[r]);if(Array.isArray(t)){let c=t.map(t=>i(o,s,t));n[a[r]]=c}else{let d=[t].map(t=>i(o,s,t));n[a[r]]=Number(d)}r++}return n}function s(t){let a=new Date,r=o(a,t);var n={az:r.azimuthdeg,el:r.elevationdeg};e("speed-card",r.velocityEciMag.toFixed(4)),e("alt-card",r.height.toFixed(2)),e("stale-card",r.stale_min.toFixed(2)),e("dist-card",r.rangeSat.toFixed(2)),e("az-text","Azimuth: "+n.az.toFixed(4)+"\xb0"),e("el-text","Elevation: "+n.el.toFixed(4)+"\xb0")}function c(t,e,a){let r=new Date,n=o(r,t);var i,s,c,d,$,p,u,_,y,m,v={az:n.azimuthdeg,el:n.elevationdeg},h=function t(e){var a=[],r=l(e.value,"azimuthdeg"),n=l(e.value,"elevationdeg"),i=e.time;let o=0;for(;o<r.length;){if(n[o]>=0){var s=r[o],c=n[o],d=i[o];a.push({az:s,el:c,t:d})}o++}return a}(t),x=(p=(c=function t(e){var a=e.getFullYear(),r=e.getMonth()+1,n=e.getDate();let i=[31,28,31,30,31,30,31,31,30,31,30,31];(a%4==0&&a%100!=0||a%400==0)&&(i[1]=29);let l=n;for(let o=0;o<r-1;o++)l+=i[o];return l}(s=i=r),46.8-($=c*(d=46.8/365.25)-79*d)),{longitude:(_=(u=i).getUTCHours(),y=u.getUTCMinutes(),(12-(_+y/60+(m=u.getUTCSeconds())/3600))*15),latitude:p}),L=function t(e){var a=[],r=l(e.value,"latitudeDeg"),n=l(e.value,"longitudeDeg");let i=0;for(;i<r.length;)a.push([n[i],r[i]]),i++;return a}(t),b={longitude:n.longitudeDeg,latitude:n.latitudeDeg,altitude:n.height};f(t.satrec.ecco,n.ma),w(x,b,L,e),I(h,v)}function d(){e("local_time",new Date().toLocaleString())}function $(t){let e=new Date(t),a=e.toLocaleDateString(),r=e.toLocaleTimeString();return{date:a,time:r}}async function p(){return new Promise((t,e)=>{"geolocation"in navigator?navigator.geolocation.getCurrentPosition(async e=>{let{latitude:a,longitude:r}=e.coords,n=await u(a,r);t({latitude:a,longitude:r,elevation:n})},t=>{e(t)}):e(Error("Geolocation is not available in this browser."))})}async function u(t,e){let a=await fetch("https://api.open-elevation.com/api/v1/lookup?locations="+t+","+e),r=await a.json(),n=r.results[0].elevation/1e3;return n}function _(t,e,a){return t+360*e/1440*a}function y(t,e,a){var r=t*Math.sqrt(1-e**2);return t*r/Math.sqrt(r**2*Math.cos(a)**2+t**2*Math.sin(a)**2)}function m(t,e,a){var r,n,i=(r=a,Math.atan2(Math.sqrt(1-(n=e)**2)*Math.sin(r),n+Math.cos(r)));return y(t,e,i)}function v(t,e){t.node()||g.append(e)}function f(t,e,a=!1){var r=d3.select("#orbit_plot_svg");r.selectAll("svg").remove();var n=r.append("svg"),i=Number(r.attr("ar")),l=n.node().getBoundingClientRect().width;n.attr("height",l*i);var o,s,c=l/2,d=l*i/2,$=Math.min(c-7,d-7),p=$,u=p*t,_=function t(e,a,r=1e-6){let n=e;for(;;){let i=n-a*Math.sin(n)-e,l=i/(1-a*Math.cos(n));if(n-=l,Math.abs(l)<r)break}return n}(e,t),m=(o=y(p,t,_),s=_,{x:o*Math.cos(s),y:o*Math.sin(s)}),v=d3.scaleLinear([-$,$],[-$+c,$+c]),f=d3.scaleLinear([-$,$],[-$+d,$+d]);n.append("div").style("position","absolute").style("z-index","10").style("visibility","hidden").style("background","#000").text("a simple tooltip"),n.append("ellipse").attr("cx",v(0)).attr("cy",f(0)).attr("rx",p).attr("ry",p*Math.sqrt(1-t**2)).attr("class","line3"),n.append("circle").attr("cx",v(u)).attr("cy",f(0)).attr("r",7).attr("class","scatter4"),n.append("text").text("Earth").attr("x",v(u)).attr("y",f(0)).attr("dx",-10).attr("dy",5).attr("text-anchor","end").attr("class","graphtext"),!0!=a&&n.append("circle").attr("cx",v(m.x)).attr("cy",f(-m.y)).attr("r",5).attr("class","satpin blink")}function h(t,e){return t([e.longitude,e.latitude])}async function x(){let t;return await d3.json("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson")}async function w(t,e,a,r,n=!1){let i=await x();var l,o=d3.select("#map_plot_svg");o.selectAll("svg").remove();var s=Number(o.attr("ar")),c=o.append("svg"),d=c.node().getBoundingClientRect().width,$=d*s;c.attr("height",d*s);let p=d3.geoEquirectangular().precision(1),u=d3.geoPath().pointRadius(5).projection(p),_=c.selectAll("path").data(i.features);p.fitExtent([[0,0],[d,$]],i),c.append("rect").attr("x",0).attr("y",0).attr("width",d).attr("height",$).attr("class","mapwater"),_.enter().append("path").attr("d",u).attr("class","mapland");let y=d3.geoGraticule()();if(_.enter().append("path").attr("d",u(y)).attr("class","mapgraticule"),!0!=n){_.enter().append("circle").attr("r",4).attr("transform","translate("+h(p,e)+")").attr("class","satpin blink");let m=d3.geoCircle().center([e.longitude,e.latitude]).radius(180*Math.acos(6371.4/(6371.4+(l=e).altitude))/Math.PI)();_.enter().append("path").attr("d",u(m)).attr("class","satviewarea"),_.enter().append("circle").attr("r",4).attr("transform","translate("+h(p,t)+")").attr("class","sunpin");let v=d3.geoCircle().center([t.longitude,t.latitude]).radius(90)();_.enter().append("path").attr("d",u(v)).attr("class","sunlitarea").attr("fill-opacity",.2),_.enter().append("path").attr("d",u({type:"Feature",geometry:{type:"LineString",coordinates:a}})).attr("class","sattrack"),_.enter().append("circle").attr("r",4).attr("class","pin").attr("transform","translate("+h(p,r.location)+")").attr("class","citypin")}}function L(t,e,a,r){if(void 0!==t&&t.length>0){let n=[],i=0;for(;i<t.length;){var l=1-Math.abs(t[i].el)/90,o=e(0)+r(l*Math.cos((t[i].az-90)*Math.PI/180)),s=a(0)+r(l*Math.sin((t[i].az-90)*Math.PI/180)),c={x:o,y:s};n.push(c),i++}return n}var l=1-Math.abs(t.el)/90,o=e(0)+r(l*Math.cos((t.az-90)*Math.PI/180)),s=a(0)+r(l*Math.sin((t.az-90)*Math.PI/180)),c={x:o,y:s};return c}function I(t,e,a=!1){var r=d3.select("#sky_plot_svg");r.selectAll("svg").remove();var n=Number(r.attr("ar")),i=r.append("svg"),l=i.node().getBoundingClientRect().width;i.attr("height",l*n);var o=l/2,s=l*n/2,c=Math.min(o-5,s-5)/1.2,d=d3.scaleLinear([-c,c],[-c+o,c+o]),p=d3.scaleLinear([-c,c],[-c+s,c+s]),u=d3.scaleLinear([-1,1],[-c,c]);for(let _=1;_<=3;_++){var y=.3333333333333333*_;i.append("circle").attr("cx",d(0)).attr("cy",p(0)).attr("r",u(y)).attr("class","axis")}var m=["N","E","S","W"],v=[0,90,180,270];let f=v.length;for(let h=0;h<f;h++){var x=(v[h]-90)*Math.PI/180,w=Math.cos(x),I=Math.sin(x);i.append("line").attr("x1",d(0)).attr("y1",p(0)).attr("x2",d(0)+u(w*(1.2-.1))).attr("y2",p(0)+u(I*(1.2-.1))).attr("class","axis"),i.append("text").text(m[h]).attr("x",d(0)+u(1.175*w)).attr("y",p(0)+u(1.175*I)).attr("dx",0).attr("dy",5).attr("text-anchor","middle").attr("class","graphlabels")}var b=L(e,d,p,u);if(!0!=a){if(void 0!==t&&t.length>0){var k=L(t,d,p,u),T=$(t[0].t),E=$(t[t.length-1].t),A=d3.line().x(t=>t.x).y(t=>t.y).curve(d3.curveCatmullRom.alpha(.5));i.append("path").attr("d",A(k)).attr("class","line4"),i.append("circle").attr("cx",k[0].x).attr("cy",k[0].y).attr("r",4).attr("class","scatter3"),b.el<0&&i.append("text").text("Rise: "+T.date+" "+T.time).attr("x",0).attr("y",0).attr("dx",5).attr("dy",10).attr("text-anchor","start").attr("class","graphtext"),i.append("circle").attr("cx",k[k.length-1].x).attr("cy",k[k.length-1].y).attr("r",4).attr("class","scatter2"),b.el<0&&i.append("text").text("Set: "+E.date+" "+E.time).attr("x",l).attr("y",0).attr("dx",-5).attr("dy",10).attr("text-anchor","end").attr("class","graphtext")}i.append("circle").attr("cx",b.x).attr("cy",b.y).attr("r",5).attr("class","satpin blink")}}let b=90/Math.PI;window.onresize=function(){location.reload()},document.addEventListener("DOMContentLoaded",async function(){setInterval(d,1e3);let t=await x();f(0,0,!0),w([],[],[],[],!0),I([],[],!0),document.getElementById("get_sat_id").onclick=async function(){e("found_sat","Searching..."),e("found_sat",(await n(document.getElementById("sat_id_input").value.trim(),"TLE"))[0])},document.getElementById("apply_sat").onclick=async function(){var r=document.getElementById("sat_id_input"),i=document.getElementById("apply_sat"),l=document.getElementById("get_sat_id");"stop"===i.getAttribute("mode")&&location.reload();var o=document.getElementById("fade-wrapper"),d=document.getElementById("spinner");o.style.display="block",o.style.opacity=1,d.style.display="block",d.style.opacity=1;let $=await n(r.value.trim(),"TLE"),u=satellite.twoline2satrec($[1],$[2]),_=await p(),y={name:"",location:{latitude:_.latitude,longitude:_.longitude}};e("local_lat",_.latitude.toFixed(4)+"\xb0"),e("local_lon",_.longitude.toFixed(4)+"\xb0"),e("local_alt",_.elevation.toFixed(4)+" km"),e("found_sat",$[0]),e("tle0",$[0]),e("tle1",$[1]),e("tle2",$[2]),e("tle_update",new Date().toLocaleString()+", generated at: "+new Date((u.jdsatepoch-2440587.5)*864e5).toLocaleString()),e("apogee-text","Apogee: "+((1+u.ecco)*Math.cbrt(398600.4418/(u.no/60)**2)-6371.4).toFixed(3)+" km"),e("perigee-text","Perigee: "+((1-u.ecco)*Math.cbrt(398600.4418/(u.no/60)**2)-6371.4).toFixed(3)+" km"),e("inclination-text","Inclination: "+(u.inclo*b).toFixed(4)+"\xb0");let m=a(u,1,_);var v=setInterval(s,2e3,m),f=setInterval(c,1e4,m,y,t);m.time.at(-1)<=new Date&&(clearInterval(v),clearInterval(f)),o.style.display="None",o.style.opacity=0,d.style.display="None",d.style.opacity=0,r.disabled=!0,l.disabled=!0,e("apply_sat","Stop"),i.setAttribute("mode","stop")}}),document.getElementById("get_sat_id").onclick=async function(){e("found_sat","Searching..."),e("found_sat",(await n(document.getElementById("sat_id_input").value.trim(),"TLE"))[0])},document.getElementById("apply_sat").onclick=async function(){var r=document.getElementById("sat_id_input"),i=document.getElementById("apply_sat"),l=document.getElementById("get_sat_id");"stop"===i.getAttribute("mode")&&location.reload();var o=document.getElementById("fade-wrapper"),d=document.getElementById("spinner");o.style.display="block",o.style.opacity=1,d.style.display="block",d.style.opacity=1;let $=await n(r.value.trim(),"TLE"),u=satellite.twoline2satrec($[1],$[2]),_=await p(),y={name:"",location:{latitude:_.latitude,longitude:_.longitude}};e("local_lat",_.latitude.toFixed(4)+"\xb0"),e("local_lon",_.longitude.toFixed(4)+"\xb0"),e("local_alt",_.elevation.toFixed(4)+" km"),e("found_sat",$[0]),e("tle0",$[0]),e("tle1",$[1]),e("tle2",$[2]),e("tle_update",new Date().toLocaleString()+", generated at: "+new Date((u.jdsatepoch-2440587.5)*864e5).toLocaleString()),e("apogee-text","Apogee: "+((1+u.ecco)*Math.cbrt(398600.4418/(u.no/60)**2)-6371.4).toFixed(3)+" km"),e("perigee-text","Perigee: "+((1-u.ecco)*Math.cbrt(398600.4418/(u.no/60)**2)-6371.4).toFixed(3)+" km"),e("inclination-text","Inclination: "+(u.inclo*b).toFixed(4)+"\xb0");let m=a(u,1,_);var v=setInterval(s,2e3,m),f=setInterval(c,1e4,m,y,t);m.time.at(-1)<=new Date&&(clearInterval(v),clearInterval(f)),o.style.display="None",o.style.opacity=0,d.style.display="None",d.style.opacity=0,r.disabled=!0,l.disabled=!0,e("apply_sat","Stop"),i.setAttribute("mode","stop")}});
+function setInnerHtmlbyId(element_id, content) {
+  document.getElementById(element_id).innerHTML = content;
+}
+
+function dummtTLE() {
+  var TLE = [
+    "ISS (ZARYA)", 
+    "1 25544U 98067A   23225.51503384  .00016273  00000-0  29947-3 0  9996",
+    "2 25544  51.6403  44.4989 0003352 304.3394 146.6746 15.49326028410681"
+  ];
+  return TLE;
+}
+
+function getDayOfYear(time) {
+  var year = time.getFullYear();
+  var month = time.getMonth() + 1; 
+  var day = time.getDate();
+  
+  // Array of days in each month, accounting for leap years
+  const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  
+  // Check for leap year and adjust February's days if necessary
+  if ((year % 4 === 0 && year % 100 !== 0) || year % 400 === 0) {
+  daysInMonth[1] = 29;
+  };
+  
+  let dayOfYear = day;
+  
+  // Sum days in months leading up to the current month
+  for (let i = 0; i < month - 1; i++) {
+  dayOfYear += daysInMonth[i];
+  };
+  
+  return dayOfYear;
+};
+
+function getSunLatitude(time) {
+  var DayofYear = getDayOfYear(time);
+  var obliquity = 23.4;
+  var ang_travel_per_day = 2*obliquity/365.25;
+  // Spring Equinox is 79th day
+  var ang_offset = 79*ang_travel_per_day;
+  var sun_lat = ((DayofYear*ang_travel_per_day) - ang_offset);
+  
+  var sun_latitude = sun_lat;
+  if (sun_lat > obliquity) {
+      var sun_latitude = 2*obliquity - sun_lat;
+  };
+  return sun_latitude;
+};
+
+function getSunLongitude(time) {
+  var gmtHours = time.getUTCHours();
+  var gmtMinutes = time.getUTCMinutes();
+  var gmtSeconds = time.getUTCSeconds();
+  var fracHours = gmtHours+gmtMinutes/60+gmtSeconds/3600;
+  var hourAngle = (12 - fracHours)*15;
+  return hourAngle;
+};
+
+function getSunLatLon(datetime) {
+  var lat = getSunLatitude(datetime);
+  var lng = getSunLongitude(datetime);
+  return {longitude: lng, latitude: lat};
+}
+
+function millisecondsToJulianDate(milliseconds) {
+  const unixEpoch = Date.parse('1970-01-01T00:00:00Z'); // Unix Epoch time in milliseconds
+  const daysSinceUnixEpoch = (milliseconds - unixEpoch) / (24 * 60 * 60 * 1000);
+  const julianDate = daysSinceUnixEpoch + 2440587.5; // January 1, 4713 BCE (Julian calendar)
+  return julianDate;
+}
+
+function predictNOrbits(satrec, N_orbits, observer_loc) {
+  var Steps_orbit = 180;
+  var Total_steps = Steps_orbit * N_orbits;
+  var period_min = (2 * Math.PI) / satrec.no;
+  var Total_time = period_min * N_orbits;
+  var deltaT_min = Total_time / Total_steps;
+
+  var prediction = { value: [], time: [] };
+  var time_start = new Date();
+
+  for (let i = 1; i <= Total_steps; i++) {
+    var Duration_min = deltaT_min * (i - 1);
+
+    var ANS = propagateTLE(satrec, time_start, Duration_min, observer_loc);
+    // prediction.push(ANS);
+    prediction.value.push(ANS.vals);
+    prediction.time.push(ANS.time);
+  }
+
+  prediction.satrec = satrec;
+
+  return prediction;
+}
+
+function propagateTLE(satrec, time_start, deltaT_min, observer_loc) {
+  var min2millisec = 60000;
+  var time = new Date(time_start.getTime() + deltaT_min * min2millisec);
+  var stale_min =
+    (millisecondsToJulianDate(time) - satrec.jdsatepoch) * 24 * 60;
+
+  //  Or you can use a JavaScript Date
+  var positionAndVelocity = satellite.propagate(satrec, time);
+
+  // The position_velocity result is a key-value pair of ECI coordinates.
+  // These are the base results from which all other coordinates are derived.
+  var positionEci = positionAndVelocity.position;
+  var velocityEci = positionAndVelocity.velocity;
+
+  // Set the Observer at 122.03 West by 36.96 North, in RADIANS
+  var observerGd = {
+    longitude: satellite.degreesToRadians(observer_loc.longitude),
+    latitude: satellite.degreesToRadians(observer_loc.latitude),
+    height: observer_loc.elevation,
+  };
+
+  // You will need GMST for some of the coordinate transforms.
+  // http://en.wikipedia.org/wiki/Sidereal_time#Definition
+  var gmst = satellite.gstime(new Date());
+
+  // You can get ECF, Geodetic, Look Angles, and Doppler Factor.
+  var positionEcf = satellite.eciToEcf(positionEci, gmst);
+  var positionGd = satellite.eciToGeodetic(positionEci, gmst);
+  var lookAngles = satellite.ecfToLookAngles(observerGd, positionEcf);
+
+  // Look Angles may be accessed by `azimuth`, `elevation`, `range_sat` properties.
+  var azimuth = lookAngles.azimuth;
+  var elevation = lookAngles.elevation;
+  var azimuthdeg = azimuth*180/Math.PI;
+  var elevationdeg = elevation*180/Math.PI;
+  var rangeSat = lookAngles.rangeSat;
+
+  // Geodetic coords are accessed via `longitude`, `latitude`, `height`.
+  var longitude = positionGd.longitude;
+  var latitude = positionGd.latitude;
+  var height = positionGd.height;
+
+  //  Convert the RADIANS to DEGREES.
+  var longitudeDeg = satellite.degreesLong(longitude);
+  var latitudeDeg = satellite.degreesLat(latitude);
+
+  //  Custom Values
+  var velocityEciMag = Math.sqrt(
+    velocityEci.x ** 2 + velocityEci.y ** 2 + velocityEci.z ** 2
+  );
+  var ma = satrec.mo + satrec.no * deltaT_min;
+
+  return {
+    time: time.getTime(),
+    vals: {
+      latitudeDeg,
+      longitudeDeg,
+      height,
+      azimuthdeg,
+      elevationdeg,
+      rangeSat,
+      velocityEciMag,
+      ma,
+      stale_min,
+    },
+  };
+}
+
+function parseTLE(TLE, FORMAT) {
+  if (FORMAT === 'TLE') {
+    const N_lines = 3;
+    var TLEarray = TLE.split('\r\n')
+      .slice(0, N_lines)
+      .map((str) => str.trim());
+    return TLEarray;
+  }
+
+  if (FORMAT === '2LE') {
+    const N_lines = 2;
+    var TLEarray = TLE.split('\r\n')
+      .slice(0, N_lines)
+      .map((str) => str.trim());
+    return TLEarray;
+  }
+}
+
+async function getGPDataCelestrack(CATNR, FORMAT) {
+  const url =
+    'https://celestrak.org/NORAD/elements/gp.php?CATNR=' +
+    CATNR +
+    '&FORMAT=' +
+    FORMAT;
+
+  let obj;
+
+  const res = await fetch(url);
+
+  if (res.ok) {
+    if (FORMAT === 'TLE' || FORMAT === '2LE') {
+      const rawTLE = await res.text();
+      obj = parseTLE(rawTLE, FORMAT);
+      return obj;
+    }
+
+    if (FORMAT === 'CSV') {
+      const rawCSV = await res.text();
+      obj = CSVToArray(rawCSV, ',').splice(0, 2);
+      return obj;
+    }
+
+    if (FORMAT === 'JSON') {
+      const jsonRes = await res.json();
+      obj = JSON.parse(JSON.stringify(jsonRes[0], '', 2));
+      return obj;
+    }
+  } else {
+    return dummtTLE();
+  }
+}
+
+function interp1(x, y, xq) {
+  const n = x.length;
+
+  // Find the indices of the two closest data points
+  let idx1 = 0;
+  let idx2 = n - 1;
+  for (let i = 0; i < n - 1; i++) {
+    if (xq >= x[i] && xq <= x[i + 1]) {
+      idx1 = i;
+      idx2 = i + 1;
+      break;
+    }
+  }
+
+  // Linear interpolation
+  const yq =
+    y[idx1] + ((y[idx2] - y[idx1]) * (xq - x[idx1])) / (x[idx2] - x[idx1]);
+  return yq;
+}
+
+function getKey(arr, keyname) {
+  var v = arr.map((item) => {
+    return item[keyname];
+  });
+  return v;
+}
+
+function prediction2sattrack(predictionObj) {
+  var satTrackPath = [];
+  var lats = getKey(predictionObj.value, 'latitudeDeg');
+  var lngs = getKey(predictionObj.value, 'longitudeDeg');
+  
+  let i = 0;
+  while (i < lats.length) {
+    satTrackPath.push([lngs[i], lats[i]]);
+    i++;
+  };
+  return satTrackPath;
+}
+
+function prediction2skymap(predictionObj) {
+  var satskycoords = [];
+  var az = getKey(predictionObj.value, 'azimuthdeg');
+  var el = getKey(predictionObj.value, 'elevationdeg');
+  var time = predictionObj.time;
+  
+  let i = 0;
+  while (i < az.length) {
+    // only include values with positive elevation - visible in sky
+    if (el[i] >= 0) {
+      var a = az[i];
+      var e = el[i];
+      var t = time[i];
+      satskycoords.push({az: a, el: e, t: t});
+    };
+    i++;
+  };
+  return satskycoords;
+}
+
+function getPredictedValsAt(queryTimes, predictionObj) {
+  var all_keys = Object.keys(predictionObj.value[0]);
+
+  let i = 0;
+  var interpolatedSet = {};
+  while (i < all_keys.length) {
+    // Known data points
+    const x = predictionObj.time;
+    const y = getKey(predictionObj.value, all_keys[i]);
+
+    if (Array.isArray(queryTimes)) {
+      // Perform linear interpolation
+      const interpolatedValues = queryTimes.map((queryPoint) =>
+        interp1(x, y, queryPoint)
+      );
+      interpolatedSet[all_keys[i]] = interpolatedValues;
+    } else {
+      // Perform linear interpolation
+      const interpolatedValues = [queryTimes].map((queryPoint) =>
+        interp1(x, y, queryPoint)
+      );
+      interpolatedSet[all_keys[i]] = Number(interpolatedValues);
+    }
+
+    i++;
+  }
+  return interpolatedSet;
+}
+
+function updateInterpolatedPrediction(predictionObj) {
+  // Query times for interpolation
+  const queryTime = new Date();
+  const interpolatedSet = getPredictedValsAt(queryTime, predictionObj);
+
+  // compute other important stuff for updating elements
+  var satskycoords_now = {az: interpolatedSet.azimuthdeg, el: interpolatedSet.elevationdeg};
+
+  //update html inner content
+  setInnerHtmlbyId("speed-card", interpolatedSet.velocityEciMag.toFixed(4));
+  setInnerHtmlbyId("alt-card", interpolatedSet.height.toFixed(2));
+  setInnerHtmlbyId("stale-card", interpolatedSet.stale_min.toFixed(2));
+  setInnerHtmlbyId("dist-card", interpolatedSet.rangeSat.toFixed(2));
+
+  setInnerHtmlbyId('az-text', 'Azimuth: ' + satskycoords_now.az.toFixed(4) + '°');
+  setInnerHtmlbyId('el-text', 'Elevation: ' + satskycoords_now.el.toFixed(4) + '°');
+};
+
+function updateInterpolatedPredictionPlots(predictionObj, observer_loc, geojson) {
+  // Query times for interpolation
+  const queryTime = new Date();
+  const interpolatedSet = getPredictedValsAt(queryTime, predictionObj);
+
+  // compute other important stuff for updating elements
+  var satskycoords_now = {az: interpolatedSet.azimuthdeg, el: interpolatedSet.elevationdeg};
+  var satskycoords = prediction2skymap(predictionObj);
+  var sun_loc = getSunLatLon(queryTime);
+  var satTrackPath = prediction2sattrack(predictionObj);
+  var sat_loc = {
+    longitude: interpolatedSet.longitudeDeg,
+    latitude: interpolatedSet.latitudeDeg,
+    altitude: interpolatedSet.height,
+  };
+
+  // update plots
+  make_orbit_plot(predictionObj.satrec.ecco, interpolatedSet.ma);
+  make_map_plot(sun_loc, sat_loc, satTrackPath, observer_loc);
+  make_sky_plot(satskycoords, satskycoords_now);
+};
+
+function updateLocalTime() {
+  setInnerHtmlbyId('local_time', (new Date()).toLocaleString());
+};
+
+function getLocalDateTime(milliseconds) {
+  const date = new Date(milliseconds);
+  const localDateString = date.toLocaleDateString();
+  const localTimeString = date.toLocaleTimeString();
+  
+  return {
+    date: localDateString,
+    time: localTimeString
+  };
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////
+const deg2rad = 2*Math.PI/180;
+const rad2deg = 180/2/Math.PI;
+const MUearth = 3.986004418e5;
+const Rearth = 6371.4;
+
+window.onresize = function(){ location.reload(); };
+
+document.addEventListener('DOMContentLoaded', async function () {
+  // Start displaying local time and update it
+  setInterval(updateLocalTime, 1000);
+
+  const geojson = await getMapJson();
+  make_map_plot([], [], [], [], true);
+  make_orbit_plot(0, 0, true);
+  make_sky_plot([], [], true);
+
+  // Monitor the search button and corresponding  onclick event
+  document.getElementById('get_sat_id').onclick = async function () {
+    setInnerHtmlbyId('found_sat', 'Searching...');
+    var textInput = document.getElementById('sat_id_input');
+    var TLE = await getGPDataCelestrack(textInput.value.trim(), 'TLE');
+    setInnerHtmlbyId('found_sat', TLE[0]);
+  };
+
+  // Monitor the apply button and corresponding  onclick event
+  document.getElementById('apply_sat').onclick = async function () {
+
+    var textInput = document.getElementById('sat_id_input');
+    var apply_btn = document.getElementById('apply_sat');  
+    var fund_btn  = document.getElementById('get_sat_id');
+
+    if (apply_btn.getAttribute('mode') === 'stop') {
+      location.reload();
+    };
+
+    var fadelayer = document.getElementById('fade-wrapper');
+    var spinner = document.getElementById('spinner');
+    fadelayer.style.display = 'block';
+    fadelayer.style.opacity = 1;
+    spinner.style.display = 'block';
+    spinner.style.opacity = 1;
+
+    const TLE = await getGPDataCelestrack(textInput.value.trim(), 'TLE');
+
+    // Initialize a satellite record
+    const satrec = satellite.twoline2satrec(TLE[1], TLE[2]);
+
+    // Get the user location from browser geolocation API
+    const observer_loc = await getUserLocation();
+    const my_loc = {
+      name: "",
+      location: {
+        latitude: observer_loc.latitude,
+        longitude: observer_loc.longitude
+      }
+    };
+    setInnerHtmlbyId('local_lat', observer_loc.latitude.toFixed(4) + '°');
+    setInnerHtmlbyId('local_lon', observer_loc.longitude.toFixed(4) + '°');
+    setInnerHtmlbyId('local_alt', observer_loc.elevation.toFixed(4) + ' km');
+
+    setInnerHtmlbyId('found_sat', TLE[0]);
+    setInnerHtmlbyId('tle0', TLE[0]);
+    setInnerHtmlbyId('tle1', TLE[1]);
+    setInnerHtmlbyId('tle2', TLE[2]);
+    setInnerHtmlbyId('tle_update', (new Date()).toLocaleString() + ', generated at: ' + (new Date((satrec.jdsatepoch - 2440587.5)*86400000)).toLocaleString());
+    setInnerHtmlbyId('apogee-text', 'Apogee: ' + ((1+satrec.ecco)*(Math.cbrt(MUearth/(satrec.no/60)**2)) - Rearth).toFixed(3) + ' km');
+    setInnerHtmlbyId('perigee-text', 'Perigee: ' + ((1-satrec.ecco)*(Math.cbrt(MUearth/(satrec.no/60)**2)) - Rearth).toFixed(3) + ' km');
+    setInnerHtmlbyId('inclination-text', 'Inclination: ' + ((satrec.inclo)*rad2deg).toFixed(4) + '°');
+  
+    const N_orbits = 1;
+    const predictionObj = predictNOrbits(satrec, N_orbits, observer_loc);
+
+    var refreshTimeData = 2000;
+    var refreshIntervalId1 = setInterval(updateInterpolatedPrediction, refreshTimeData, predictionObj);
+    var refreshTimePlots = 10000;
+    var refreshIntervalId2 = setInterval(updateInterpolatedPredictionPlots, refreshTimePlots, predictionObj, my_loc, geojson);
+    
+    if (predictionObj.time.at(-1) <= (new Date())) {
+      clearInterval(refreshIntervalId1);
+      clearInterval(refreshIntervalId2);
+    };
+
+    fadelayer.style.display = 'None';
+    fadelayer.style.opacity = 0;
+    spinner.style.display = 'None';
+    spinner.style.opacity = 0;
+
+    textInput.disabled = true;
+    fund_btn.disabled = true;
+    setInnerHtmlbyId('apply_sat', 'Stop');
+    apply_btn.setAttribute('mode', 'stop');
+  };
+});
+
+////////////////////////////////////////////////////////////////////////////////////////////
+
+function CSVToArray(strData, strDelimiter = ',') {
+  // Create a regular expression to parse the CSV values.
+  var objPattern = new RegExp(
+    // Delimiters.
+    '(\\' +
+      strDelimiter +
+      '|\\r?\\n|\\r|^)' +
+      // Quoted fields.
+      '(?:"([^"]*(?:""[^"]*)*)"|' +
+      // Standard fields.
+      '([^"\\' +
+      strDelimiter +
+      '\\r\\n]*))',
+    'gi'
+  );
+
+  var arrData = [[]];
+
+  var arrMatches = null;
+
+  while ((arrMatches = objPattern.exec(strData))) {
+    // Get the delimiter that was found.
+    var strMatchedDelimiter = arrMatches[1];
+
+    if (strMatchedDelimiter.length && strMatchedDelimiter !== strDelimiter) {
+      arrData.push([]);
+    }
+
+    var strMatchedValue;
+
+    if (arrMatches[2]) {
+      strMatchedValue = arrMatches[2].replace(new RegExp('""', 'g'), '"');
+    } else {
+      strMatchedValue = arrMatches[3];
+    }
+
+    arrData[arrData.length - 1].push(strMatchedValue);
+  }
+
+  return arrData;
+}
+
+async function getUserLocation() {
+  return new Promise((resolve, reject) => {
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          const elevation = await getUserAlt(latitude, longitude);
+          resolve({ latitude, longitude, elevation });
+        },
+        (error) => {
+          reject(error);
+        }
+      );
+    } else {
+      reject(new Error('Geolocation is not available in this browser.'));
+    }
+  });
+}
+
+async function getUserAlt(lat, lng) {
+  const url = 'https://api.open-elevation.com/api/v1/lookup?locations=';
+  const full_url = url + lat + ',' + lng;
+  const response = await fetch(full_url);
+  const data = await response.json();
+  const elevation_km = data.results[0].elevation / 1000.0;
+  return elevation_km;
+}
+
+function getMeanAnomalyAfter(
+  MA_epoch_deg,
+  Mean_motion_rev_day,
+  Delta_T_after_epoch_mins
+) {
+  const Mean_motion_deg_min = (Mean_motion_rev_day * 360) / (24.0 * 60.0);
+  const MA_at_T_deg =
+    MA_epoch_deg + Mean_motion_deg_min * Delta_T_after_epoch_mins;
+  return MA_at_T_deg;
+}
