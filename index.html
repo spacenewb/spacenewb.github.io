@@ -1,4 +1,220 @@
----
-layout: home
-# Index page
----
+<!-- Webpage hosted at: http://192.168.1.52:5500/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <title>Satellite Dashboard</title>
+
+    <link rel="stylesheet" type="text/css" href="style.css">
+
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter" />
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/satellite.js/5.0.0/satellite.min.js"></script>
+
+    <script src="https://unpkg.com/topojson@3"></script>
+
+    <script src="index.js"></script>
+</head>
+<body>
+    <div id="fade-wrapper"></div>
+    <div class="ripple" id="spinner"><div></div><div></div></div>
+
+    <div class="layout-container">
+    <div class="layout-cols">
+        <div class="left-col">
+
+        <div class="card">
+        <div class="card-grid">
+            <div class="card-head heading">Satellite Selection</div>
+            <div class="card-body">
+            <form>
+                <input type="text" id="sat_id_input" name="sat_id_input" placeholder="Enter NORAD ID" value="25544">
+                <button type="button" class="button" id="get_sat_id">Look it up</button>
+                <br>
+            </form>
+            <span class="mono">Found:</span>
+            <span class="mono truncate" id="found_sat">ISS (ZARYA)</span>
+            <br>
+            <br>
+            <button type="button" class="button fullspan" id="apply_sat">Apply</button>
+            </div>
+        </div>
+        </div>
+
+        <div class="card">
+            <div class="card-grid">
+            <div class="card-head heading">Satellite Orbit</div>
+            <div class="card-body">
+                <div class="img-container" id="orbit_plot_svg" ar="1">
+                </div>
+                <div class="text-block">
+                <span class="mono newline" id="apogee-text">Apogee: -</span>
+                <span class="mono newline" id="perigee-text">Perigee: -</span>
+                <span class="mono newline" id="inclination-text">Inclination: -</span>
+                </div>
+            </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-grid">
+            <div class="card-head heading">Satellite Telemetry</div>
+            <div class="card-body">
+                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin a
+                lorem vehicula, sagittis ligula quis, viverra leo. Nunc feugiat
+                elementum massa, sit amet ultrices turpis viverra ut. Aliquam quis
+                lacus a arcu ultrices pellentesque. Quisque turpis leo, imperdiet id
+                ipsum vel, mollis dictum quam.
+            </div>
+            <div class="card-foot">Card Footer</div>
+            </div>
+        </div>
+        
+        </div>
+        <div class="mid-col">
+            <div class="card">
+                <div class="card-grid">
+                <div class="card-head heading">Satellite TLE</div>
+                <div class="card-body">
+                    <div class="text-block">
+                    <span class="mono newline" id="tle0">-</span>
+                    <span class="mono newline" id="tle1">-</span>
+                    <span class="mono newline" id="tle2">-</span>
+                    </div>
+                </div>
+                <div class="card-foot">
+                    <div class="newline">
+                        <span>TLE last fetched at: </span>
+                        <span id="tle_update">2022-11-08 23:15:43</span>
+                    </div>
+                </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-grid">
+                <div class="card-head heading">Satellite Ground Track</div>
+                <div class="card-body">
+                    <div class="img-container" id="map_plot_svg" ar="0.5">
+                    </div>
+                </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-grid">
+                    <div class="card-head heading">Satellite Summary</div>
+                    <div class="card-body">
+                        <div class="cols2">
+                            <span class="text-block text-justify normal summary" id="sat_summary"></span>
+                            <span class="text-block text-justify normal summary" id="sat_summary2"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        <div class="right-col">
+
+            <div class="card">
+                <div class="card-grid">
+                <div class="card-head heading">Satellite Live Stats</div>
+                <div class="card-body">
+                    <div class="container-gallery">
+                    <div class="g1">
+                        <div class="container-placard">
+                        <div class="placard" accent="1">
+                            <div class="placard-head">Speed</div>
+                            <div class="placard-body" id="speed-card">-</div>
+                            <div class="placard-side">km/s</div>
+                        </div>
+                        </div>
+                    </div>
+
+                    <div class="g2">
+                        <div class="container-placard">
+                        <div class="placard" accent="2">
+                            <div class="placard-head">Altitude</div>
+                            <div class="placard-body" id="alt-card">-</div>
+                            <div class="placard-side">km</div>
+                        </div>
+                        </div>
+                    </div>
+
+                    <div class="g3">
+                        <div class="container-placard">
+                        <div class="placard" accent="3">
+                            <div class="placard-head">Last observed</div>
+                            <div class="placard-body" id="stale-card">-</div>
+                            <div class="placard-side">min. ago</div>
+                        </div>
+                        </div>
+                    </div>
+
+                    <div class="g4">
+                        <div class="container-placard">
+                        <div class="placard" accent="4">
+                            <div class="placard-head">Distance</div>
+                            <div class="placard-body"  id="dist-card">-</div>
+                            <div class="placard-side">ps</div>
+                        </div>
+                        </div>
+                    </div>
+                    </div>
+                </div>
+                </div>
+            </div>
+
+            
+            <div class="card">
+                <div class="card-grid">
+                <div class="card-head heading">Current Sky Plot</div>
+                <div class="card-body">
+                    <div class="img-container" id="sky_plot_svg" ar="1">
+                    </div>
+                    <div class="text-block">
+                        <span class="mono newline" id="az-text">Azimuth: </span>
+                        <span class="mono newline" id="el-text">Elevation: </span>
+                    </div>
+                </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-grid">
+                <div class="card-head heading">Current Location</div>
+                <div class="card-body">
+                    <div class="text-block">
+                    <div class="newline">
+                        <span class="mono">Latitude: </span>
+                        <span class="mono" id="local_lat">-</span>
+                    </div>
+                    <div class="newline">
+                        <span class="mono">Longitude: </span>
+                        <span class="mono" id="local_lon">-</span>
+                    </div>
+                    <div class="newline">
+                        <span class="mono">Altitude: </span>
+                        <span class="mono" id="local_alt">-</span>
+                    </div>
+                    <div class="newline">
+                        <span class="mono">Local Time: </span>
+                        <span class="mono" id="local_time">-</span>
+                    </div>
+                    </div>
+                </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+</body>
+
+<script src="graph_orbit.js"></script>
+<script src="graph_sky.js"></script>
+<script src="graph_map.js"></script>
+<!-- <script src="wiki.js"></script> -->
