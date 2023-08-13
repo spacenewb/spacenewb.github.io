@@ -364,7 +364,7 @@ const rad2deg = 180/2/Math.PI;
 const MUearth = 3.986004418e5;
 const Rearth = 6371.4;
 
-window.onresize = function(){ location.reload(); };
+// window.onresize = function(){ location.reload(); };
 
 document.addEventListener('DOMContentLoaded', async function () {
   // Start displaying local time and update it
